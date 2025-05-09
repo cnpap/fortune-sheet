@@ -19,9 +19,9 @@ const defaultData = {
   status: 0,
 };
 
-const dbName = "fortune-sheet";
-const collectionName = "workbook";
-const uri = "mongodb://localhost:27017";
+const dbName = process.env.MONGODB_DB_NAME || "fortune-sheet";
+const collectionName = process.env.MONGODB_COLLECTION_NAME || "workbook";
+const uri = process.env.MONGODB_URI || "mongodb://localhost:27017";
 const client = new MongoClient(uri);
 let presences = [];
 
