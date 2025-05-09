@@ -105,16 +105,18 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    broadcastToOthers(
-      ws.id,
-      JSON.stringify({
-        req: "removePresences",
-        data: ws.presences,
-      })
-    );
-    presences = _.differenceBy(presences, ws.presences, (v) =>
-      v.userId == null ? v.username : v.userId
-    );
+    if (ws.presences) {
+      broadcastToOthers(
+        ws.id,
+        JSON.stringify({
+          req: "removePresences",
+          data: ws.presences,
+        })
+      );
+      presences = _.differenceBy(presences, ws.presences, (v) =>
+        v.userId == null ? v.username : v.userId
+      );
+    }
     delete connections[ws.id];
   });
 });

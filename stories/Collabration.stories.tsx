@@ -36,7 +36,42 @@ const Template: StoryFn<typeof Workbook> = ({ ...args }) => {
     socket.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.req === "getData") {
-        setData(msg.data.map((d: any) => ({ id: d._id, ...d })));
+        if (Array.isArray(msg.data) && msg.data.length > 0) {
+          setData(
+            msg.data.map((d: any) => {
+              if (d && d._id) {
+                return { id: d._id, ...d };
+              }
+              return { id: uuidv4(), ...d };
+            })
+          );
+        } else {
+          const defaultSheet = {
+            id: uuidv4(),
+            name: "Sheet1",
+            celldata: [],
+            row: 100,
+            column: 26,
+            config: {},
+          };
+          setData([defaultSheet]);
+
+          setTimeout(() => {
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(
+                JSON.stringify({
+                  req: "op",
+                  data: [
+                    {
+                      op: "addSheet",
+                      value: defaultSheet,
+                    },
+                  ],
+                })
+              );
+            }
+          }, 500);
+        }
       } else if (msg.req === "op") {
         workbookRef.current?.applyOp(msg.data);
       } else if (msg.req === "addPresences") {
@@ -48,7 +83,37 @@ const Template: StoryFn<typeof Workbook> = ({ ...args }) => {
     socket.onerror = () => {
       setError(true);
     };
-  }, []);
+
+    const handleBeforeUnload = () => {
+      if (
+        socket &&
+        socket.readyState === WebSocket.OPEN &&
+        lastSelection.current
+      ) {
+        socket.send(
+          JSON.stringify({
+            req: "removePresences",
+            data: [
+              {
+                userId,
+                username,
+              },
+            ],
+          })
+        );
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (socket.readyState === WebSocket.OPEN) {
+        handleBeforeUnload();
+        socket.close();
+      }
+    };
+  }, [userId, username]);
 
   const onOp = useCallback((op: Op[]) => {
     const socket = wsRef.current;
