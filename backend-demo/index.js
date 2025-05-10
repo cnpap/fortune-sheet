@@ -26,8 +26,13 @@ const client = new MongoClient(uri);
 let presences = [];
 
 async function initMongoDB() {
-  await client.connect();
-  await client.db("admin").command({ ping: 1 });
+  try {
+    await client.connect();
+    await client.db("admin").command({ ping: 1 });
+    console.log("Connected to MongoDB");
+  } catch (error) {
+    console.error("Failed to connect to MongoDB:", error);
+  }
 }
 
 initMongoDB();

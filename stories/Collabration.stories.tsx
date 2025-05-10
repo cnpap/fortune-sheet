@@ -27,7 +27,8 @@ const Template: StoryFn<typeof Workbook> = ({ ...args }) => {
   }, []);
 
   useEffect(() => {
-    const socket = new WebSocket("ws://localhost:8081/ws");
+    const wsUrl = process.env.STORYBOOK_WS_URL || "ws://localhost:8081/ws";
+    const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
 
     socket.onopen = () => {
