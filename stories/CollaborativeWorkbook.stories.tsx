@@ -85,6 +85,7 @@ const CollaborativeWorkbook: React.FC = () => {
     type: "success" | "error" | "info";
   } | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+  const [importId, setImportId] = useState(0); // 添加导入标识，用于触发数据更新
 
   const wsRef = useRef<WebSocket>();
   const workbookRef = useRef<WorkbookInstance>(null);
@@ -124,21 +125,40 @@ const CollaborativeWorkbook: React.FC = () => {
       setShareCode(code);
       // 加入指定分享码的房间
       socket.send(JSON.stringify({ req: "join", shareCode: code }));
-      showMessage(`已连接到工作簿：${code}`, "success");
+      showMessage(`正在连接到工作簿：${code}...`, "info");
     };
 
     socket.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.req === "getData") {
         if (Array.isArray(msg.data) && msg.data.length > 0) {
-          setData(
-            msg.data.map((d: any) => {
-              if (d && d._id) {
-                return { id: d._id, ...d };
-              }
-              return { id: d.id || uuidv4(), ...d };
-            })
-          );
+          // 深度处理导入的数据，确保格式正确
+          const processedSheets = msg.data.map((sheet: any) => ({
+            ...sheet,
+            // 确保id唯一性
+            id: sheet._id || sheet.id || uuidv4(),
+            // 确保每个sheet有必要的默认值
+            config: sheet.config || {},
+            status: sheet.status || 1,
+            // 确保celldata格式正确
+            celldata: (sheet.celldata || []).map((cell: any) => ({
+              ...cell,
+              v: cell.v
+                ? {
+                    ...cell.v,
+                    // 确保m属性存在
+                    m:
+                      cell.v.m ||
+                      (cell.v.v !== null && cell.v.v !== undefined
+                        ? String(cell.v.v)
+                        : ""),
+                  }
+                : { v: "", m: "" },
+            })),
+          }));
+          setData(processedSheets);
+          // 增加导入ID触发更新
+          setImportId((prev) => prev + 1);
         } else {
           // 如果没有数据，创建默认工作表
           const defaultSheet = {
@@ -152,10 +172,15 @@ const CollaborativeWorkbook: React.FC = () => {
           setData([defaultSheet]);
         }
         setIsLoading(false);
+        showMessage(`成功连接到工作簿：${code}`, "success");
       } else if (msg.req === "op") {
         workbookRef.current?.applyOp(msg.data);
       } else if (msg.req === "addPresences") {
-        setOnlineUsers(msg.data || []);
+        // 过滤掉当前用户，避免显示自己为协同用户
+        const filteredUsers = (msg.data || []).filter(
+          (user: any) => user.userId !== userId
+        );
+        setOnlineUsers(filteredUsers);
         workbookRef.current?.addPresences(msg.data);
       } else if (msg.req === "removePresences") {
         workbookRef.current?.removePresences(msg.data);
@@ -274,10 +299,60 @@ const CollaborativeWorkbook: React.FC = () => {
 
     setIsLoading(true);
     try {
-      console.log("开始导入文件:", file.name);
+      console.log(
+        "开始导入文件:",
+        file.name,
+        "类型:",
+        file.type,
+        "大小:",
+        file.size,
+        "bytes"
+      );
 
       // 导入文件
       const importedSheets = await importFile(file);
+
+      // 打印导入的Excel数据
+      console.log("导入的Excel数据:", importedSheets);
+      console.log("sheet数量:", importedSheets.length);
+
+      if (importedSheets.length > 0) {
+        console.log("第一个sheet样本数据:", {
+          name: importedSheets[0].name,
+          rowCount: importedSheets[0].row,
+          colCount: importedSheets[0].column,
+          cellCount: importedSheets[0].celldata?.length || 0,
+        });
+      }
+
+      // 深度处理导入的数据，确保格式正确
+      const processedSheets = importedSheets.map((sheet) => ({
+        ...sheet,
+        // 确保id唯一性
+        id:
+          sheet.id ||
+          `sheet_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        // 确保每个sheet有必要的默认值
+        config: sheet.config || {},
+        status: sheet.status || 1,
+        // 确保celldata格式正确
+        celldata: (sheet.celldata || []).map((cell) => ({
+          ...cell,
+          v: cell.v
+            ? {
+                ...cell.v,
+                // 确保m属性存在
+                m:
+                  cell.v.m ||
+                  (cell.v.v !== null && cell.v.v !== undefined
+                    ? String(cell.v.v)
+                    : ""),
+              }
+            : { v: "", m: "" },
+        })),
+      }));
+
+      console.log("处理后的sheet数据:", processedSheets);
 
       // 发送到服务器
       const response = await fetch(
@@ -287,7 +362,7 @@ const CollaborativeWorkbook: React.FC = () => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ sheets: importedSheets }),
+          body: JSON.stringify({ sheets: processedSheets }),
         }
       );
 
@@ -303,6 +378,14 @@ const CollaborativeWorkbook: React.FC = () => {
       }
     } catch (importError) {
       console.error("导入文件失败:", importError);
+
+      // 记录更详细的错误信息
+      if (importError instanceof Error) {
+        console.error("错误类型:", importError.name);
+        console.error("错误消息:", importError.message);
+        console.error("错误堆栈:", importError.stack);
+      }
+
       showMessage(
         importError instanceof Error ? importError.message : "导入文件失败",
         "error"
@@ -493,6 +576,15 @@ const CollaborativeWorkbook: React.FC = () => {
                 placeholder="输入分享码"
                 value={inputShareCode}
                 onChange={(e) => setInputShareCode(e.target.value)}
+                onKeyPress={(e) => {
+                  if (
+                    e.key === "Enter" &&
+                    inputShareCode.trim() &&
+                    !isLoading
+                  ) {
+                    connectToWorkbook(inputShareCode);
+                  }
+                }}
                 style={{
                   padding: "8px",
                   border: "1px solid #d9d9d9",
@@ -618,6 +710,7 @@ const CollaborativeWorkbook: React.FC = () => {
       <div style={{ flex: 1 }}>
         {isConnected && data ? (
           <Workbook
+            key={`workbook-${importId}`}
             ref={workbookRef}
             data={data}
             onChange={onChange}

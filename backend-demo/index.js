@@ -113,14 +113,14 @@ app.get("/workbook/:shareCode", async (req, res) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data,
       shareCode,
     });
   } catch (error) {
     console.error("获取工作簿数据失败:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message || "获取工作簿数据失败",
     });
@@ -143,13 +143,16 @@ app.post("/import/:shareCode", async (req, res) => {
     const db = client.db(dbName);
     const coll = db.collection(collectionName);
 
-    // 检查分享码是否存在
+    // 检查分享码是否存在，如果不存在则创建
     const existingData = await getData(shareCode);
     if (existingData.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: "分享码不存在",
-      });
+      // 如果分享码不存在，先创建一个默认工作表
+      const defaultSheet = {
+        ...defaultData,
+        shareCode,
+        createdAt: new Date(),
+      };
+      await coll.insertOne(defaultSheet);
     }
 
     // 删除现有数据
@@ -165,14 +168,14 @@ app.post("/import/:shareCode", async (req, res) => {
 
     await coll.insertMany(sheetsWithShareCode);
 
-    res.json({
+    return res.json({
       success: true,
       message: "文件导入成功",
       shareCode,
     });
   } catch (error) {
     console.error("导入文件失败:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message || "导入文件失败",
     });
@@ -201,7 +204,7 @@ app.post("/export/:shareCode", async (req, res) => {
     // 返回文件下载URL
     const fileUrl = `/exports/${result.fileName}`;
 
-    res.json({
+    return res.json({
       success: true,
       fileUrl,
       fileName: result.fileName,
@@ -209,7 +212,7 @@ app.post("/export/:shareCode", async (req, res) => {
     });
   } catch (error) {
     console.error("导出文件失败:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message || "导出文件失败",
     });
@@ -287,8 +290,25 @@ wss.on("connection", (ws) => {
       // 加入指定分享码的房间
       ws.shareCode = msg.shareCode;
 
+      // 获取工作簿数据
+      let workbookData = await getData(msg.shareCode);
+
+      // 如果分享码不存在，创建默认工作簿
+      if (workbookData.length === 0) {
+        const db = client.db(dbName);
+        const coll = db.collection(collectionName);
+
+        const defaultSheet = {
+          ...defaultData,
+          shareCode: msg.shareCode,
+          createdAt: new Date(),
+        };
+
+        await coll.insertOne(defaultSheet);
+        workbookData = [defaultSheet];
+      }
+
       // 发送工作簿数据
-      const workbookData = await getData(msg.shareCode);
       ws.send(
         JSON.stringify({
           req: "getData",
