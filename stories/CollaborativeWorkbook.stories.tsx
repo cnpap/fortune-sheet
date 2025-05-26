@@ -95,6 +95,8 @@ const CollaborativeWorkbook: React.FC = () => {
     return { username: `用户-${_userId.slice(0, 3)}`, userId: _userId };
   }, []);
 
+  const apiBaseUrl = "http://localhost:8081";
+
   // 显示消息
   const showMessage = (text: string, type: "success" | "error" | "info") => {
     setMessage({ text, type });
@@ -116,7 +118,8 @@ const CollaborativeWorkbook: React.FC = () => {
     setIsLoading(true);
     setConnectionError(null);
 
-    const wsUrl = process.env.STORYBOOK_WS_URL || "ws://localhost:8081/ws";
+    const wsUrl =
+      process.env.STORYBOOK_WS_URL || `${apiBaseUrl.replace("http", "ws")}/ws`;
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
 
@@ -204,7 +207,7 @@ const CollaborativeWorkbook: React.FC = () => {
   const createNewWorkbook = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:8081/create", {
+      const response = await fetch(`${apiBaseUrl}/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -355,16 +358,13 @@ const CollaborativeWorkbook: React.FC = () => {
       console.log("处理后的sheet数据:", processedSheets);
 
       // 发送到服务器
-      const response = await fetch(
-        `http://localhost:8081/import/${shareCode}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ sheets: processedSheets }),
-        }
-      );
+      const response = await fetch(`${apiBaseUrl}/import/${shareCode}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sheets: processedSheets }),
+      });
 
       const result = await response.json();
       if (result.success) {
@@ -403,25 +403,22 @@ const CollaborativeWorkbook: React.FC = () => {
     }
 
     try {
-      const response = await fetch(
-        `http://localhost:8081/export/${shareCode}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            format: "xlsx",
-            fileName: `协同工作簿-${shareCode}`,
-          }),
-        }
-      );
+      const response = await fetch(`${apiBaseUrl}/export/${shareCode}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          format: "xlsx",
+          fileName: `协同工作簿-${shareCode}`,
+        }),
+      });
 
       const result = await response.json();
       if (result.success) {
         // 下载文件
         const link = document.createElement("a");
-        link.href = `http://localhost:8081${result.fileUrl}`;
+        link.href = `${apiBaseUrl}${result.fileUrl}`;
         link.download = result.fileName;
         document.body.appendChild(link);
         link.click();
@@ -444,25 +441,22 @@ const CollaborativeWorkbook: React.FC = () => {
     }
 
     try {
-      const response = await fetch(
-        `http://localhost:8081/export/${shareCode}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            format: "csv",
-            fileName: `协同工作簿-${shareCode}`,
-          }),
-        }
-      );
+      const response = await fetch(`${apiBaseUrl}/export/${shareCode}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          format: "csv",
+          fileName: `协同工作簿-${shareCode}`,
+        }),
+      });
 
       const result = await response.json();
       if (result.success) {
         // 下载文件
         const link = document.createElement("a");
-        link.href = `http://localhost:8081${result.fileUrl}`;
+        link.href = `${apiBaseUrl}${result.fileUrl}`;
         link.download = result.fileName;
         document.body.appendChild(link);
         link.click();
