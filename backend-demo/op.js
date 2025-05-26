@@ -4,13 +4,14 @@ const _ = require("lodash");
 /**
  * @param {import("mongodb").Collection} collection mongodb collection
  * @param {any[]} ops op list
+ * @param {string} shareCode 分享码，用于区分不同的工作簿
  */
-async function applyOp(collection, ops) {
+async function applyOp(collection, ops, shareCode = null) {
   const operations = [];
   // eslint-disable-next-line no-restricted-syntax
   for (const op of ops) {
     const { path, id } = op;
-    const filter = { id };
+    const filter = shareCode ? { id, shareCode } : { id };
     if (op.op === "insertRowCol") {
       /**
        * special op: insertRowCol
@@ -74,7 +75,8 @@ async function applyOp(collection, ops) {
       /**
        * special op: addSheet
        */
-      operations.push({ insertOne: { document: op.value } });
+      const sheetData = shareCode ? { ...op.value, shareCode } : op.value;
+      operations.push({ insertOne: { document: sheetData } });
     } else if (op.op === "deleteSheet") {
       /**
        * special op: deleteSheet
@@ -147,7 +149,8 @@ async function applyOp(collection, ops) {
       console.error("row assigning not supported");
     } else if (path.length === 0 && op.op === "add") {
       // add new sheet
-      operations.push({ insertOne: { document: op.value } });
+      const sheetData = shareCode ? { ...op.value, shareCode } : op.value;
+      operations.push({ insertOne: { document: sheetData } });
     } else if (path[0] !== "data") {
       // other config update
       if (op.op === "remove") {
