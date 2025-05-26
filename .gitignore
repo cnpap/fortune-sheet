@@ -138,3 +138,5 @@ dist
 
 # storybook
 /storybook-static
+
+backend-demo/exports

@@ -4,7 +4,10 @@ const { MongoClient } = require("mongodb");
 const SocketServer = require("ws").Server;
 const uuid = require("uuid");
 const _ = require("lodash");
+const path = require("path");
+const cors = require("cors");
 const { applyOp } = require("./op");
+const { exportToExcel } = require("./export");
 
 const defaultData = {
   name: "Demo",
@@ -21,7 +24,9 @@ const defaultData = {
 
 const dbName = process.env.MONGODB_DB_NAME || "fortune-sheet";
 const collectionName = process.env.MONGODB_COLLECTION_NAME || "workbook";
-const uri = process.env.MONGODB_URI || "mongodb://localhost:27017";
+const uri =
+  process.env.MONGODB_URI ||
+  "mongodb://root:h0Igwg0qfq21xXyPybJSTJkmvj98MHtdYgynCHZRdK70OceBu8sL0wnHH27sONZ7@119.7.191.6:27017/?directConnection=true";
 const client = new MongoClient(uri);
 let presences = [];
 
@@ -39,6 +44,13 @@ initMongoDB();
 
 const app = express();
 const port = process.env.PORT || 8081;
+
+// 启用CORS
+app.use(cors());
+// 解析JSON请求体
+app.use(express.json());
+// 静态文件目录，用于提供导出的文件
+app.use("/exports", express.static(path.join(__dirname, "exports")));
 
 async function getData() {
   const db = client.db(dbName);
@@ -63,6 +75,34 @@ app.get("/init", async (req, res) => {
   res.json({
     ok: true,
   });
+});
+
+// 导出Excel或CSV文件
+app.post("/export", async (req, res) => {
+  try {
+    const { format = "xlsx", fileName = "fortune-sheet-export" } = req.body;
+
+    // 获取当前工作簿数据
+    const sheets = await getData();
+
+    // 导出为文件
+    const result = exportToExcel(sheets, fileName, format);
+
+    // 返回文件下载URL
+    const fileUrl = `/exports/${result.fileName}`;
+
+    res.json({
+      success: true,
+      fileUrl,
+      fileName: result.fileName,
+    });
+  } catch (error) {
+    console.error("导出文件失败:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "导出文件失败",
+    });
+  }
 });
 
 const server = app.listen(port, () => {
